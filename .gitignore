@@ -147,3 +147,13 @@ vite.config.ts.timestamp-*
 
 # Turbo Repo
 .turbo
+
+# Claude local files
+.claude/
+
+# Datos reales del tablero: nunca subirlos al repositorio (el sitio se publica
+# sin datos). La base embebida generada por tools/build_embedded_data.py y los
+# Excel fuente se quedan sólo en local.
+Client/data/
+*.xlsx
+*.xls
