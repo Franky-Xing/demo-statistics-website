@@ -1,0 +1,54 @@
+Copyright (c) 2026 Poder Judicial del Estado de Chihuahua.
+Todos los derechos reservados.
+
+Este repositorio publica una demostración del tablero estadístico del Poder
+Judicial del Estado de Chihuahua. Se permite ver el código y usar la
+demostración en línea. Cualquier otro uso, copia, modificación, distribución
+o publicación del código, total o parcial, requiere autorización previa y por
+escrito del Poder Judicial del Estado de Chihuahua. Esto no limita lo que los
+Términos de Servicio de GitHub permiten hacer con los repositorios públicos
+dentro de GitHub, como verlos y bifurcarlos (fork).
+
+La demostración no contiene datos reales. El archivo de ejemplo
+samples/BASE_DEMO_FICTICIA.xlsx tiene datos ficticios generados al azar que
+no reflejan la actividad real de los juzgados.
+
+El nombre, el escudo y los demás signos distintivos del Poder Judicial del
+Estado de Chihuahua no se licencian junto con este software.
+
+El software se proporciona "tal cual", sin garantía de ningún tipo. Ni el
+Poder Judicial del Estado de Chihuahua ni los autores son responsables de
+daños derivados de su uso.
+
+Las bibliotecas de terceros que usa la página (Tailwind CSS, Chart.js,
+chartjs-plugin-datalabels, SheetJS y Font Awesome) se cargan desde CDN y se
+rigen por sus propias licencias.
+
+-------------------------------------------------------------------------------
+English translation, for reference only (the Spanish text prevails):
+
+Copyright (c) 2026 Poder Judicial del Estado de Chihuahua.
+All rights reserved.
+
+This repository publishes a demo of the statistics dashboard of the Poder
+Judicial del Estado de Chihuahua. You may view the code and use the online
+demo. Any other use, copying, modification, distribution or publication of
+the code, in whole or in part, requires prior written permission from the
+Poder Judicial del Estado de Chihuahua. This does not limit what GitHub's
+Terms of Service allow for public repositories within GitHub, such as
+viewing and forking them.
+
+The demo contains no real data. The sample file
+samples/BASE_DEMO_FICTICIA.xlsx holds randomly generated fictitious data
+that doesn't reflect real court activity.
+
+The name, the shield and the other distinctive signs of the Poder Judicial
+del Estado de Chihuahua are not licensed with this software.
+
+The software is provided "as is", without warranty of any kind. Neither the
+Poder Judicial del Estado de Chihuahua nor the authors are liable for any
+damages arising from its use.
+
+The third-party libraries used by the page (Tailwind CSS, Chart.js,
+chartjs-plugin-datalabels, SheetJS and Font Awesome) are loaded from CDNs
+and remain under their own licenses.
