@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard Estadístico Judicial - Poder Judicial de Chihuahua</title>
+  <link rel="icon" type="image/x-icon" href="./media/tsj-escudo.ico">
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    // Tema dorado (v2 del tablero). Las gráficas usan los mismos valores en
+    // TEMA (js/dashboard.js): si cambias uno, cambia el otro.
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            gold: { DEFAULT: '#d4af37', light: '#f5d77f', dark: '#997a15' },
+            tsj: {
+              bg: '#0b0c10',     // fondo de la página y pie
+              card: '#12141a',   // tarjetas y cabecera
+              field: '#181a22',  // campos, menús y cajas internas
+              head: '#161820',   // encabezado y pie de la tabla
+              chip: '#1a1c24',   // insignias
+              line: '#232733',   // bordes de tarjeta
+              edge: '#2b3040',   // bordes de campo
+              soft: '#1c1f2b',   // separadores
+              btn: '#3b4252'     // bordes de botón
+            }
+          }
+        }
+      }
+    };
+  </script>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <!-- Chart.js Plugin DataLabels -->
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
+  <!-- SheetJS para lectura de Excel -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <style>
+    body { font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: #12141a; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #2b3040; border-radius: 4px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #d4af37; }
+    .truncate-pre-wrap { white-space: pre-wrap; overflow-wrap: break-word; }
+  </style>
+</head>
+<body class="bg-tsj-bg text-slate-200 min-h-screen flex flex-col antialiased selection:bg-gold/30 selection:text-white">
+
+  <!-- Modal / Overlay de Procesamiento de Excel -->
+  <div id="loadingOverlay" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex flex-col items-center justify-center p-4">
+    <div class="bg-tsj-card border border-gold/30 rounded-xl p-6 sm:p-8 max-w-md w-full shadow-2xl text-center">
+      <div class="w-16 h-16 bg-tsj-field text-gold-light rounded-xl flex items-center justify-center mx-auto mb-4 border border-gold/40">
+        <i class="fa-solid fa-spinner fa-spin text-3xl"></i>
+      </div>
+      <h3 class="text-lg font-bold text-white mb-1" id="loadingTitle">Procesando Base Judicial</h3>
+      <p class="text-xs text-gray-400 mb-5" id="loadingSubtitle">Buscando la hoja de datos, descartando 'SIN AGRUPAR' y totalizando la columna Resultado...</p>
+
+      <!-- Barra de Progreso -->
+      <div class="w-full bg-tsj-field rounded-full h-2.5 overflow-hidden border border-tsj-line">
+        <div id="progressBar" class="bg-gradient-to-r from-gold-dark via-gold to-gold-light h-2.5 rounded-full transition-all duration-300 w-1/4"></div>
+      </div>
+      <div class="mt-2 text-[11px] text-gray-400 font-mono text-right" id="progressStatus">Analizando hojas...</div>
+    </div>
+  </div>
+
+  <!-- Header Superior Institucional -->
+  <header class="bg-tsj-card/95 border-b border-tsj-line sticky top-0 z-40 shadow-lg backdrop-blur-md">
+    <!-- Mismo ancho que la barra de filtros y <main> (ver comentario en <main>) -->
+    <div class="max-w-7xl lg:max-w-[84rem] mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex flex-wrap items-center justify-between gap-4">
+      <div class="flex items-center gap-3.5">
+        <div class="w-11 h-11 rounded-xl bg-gradient-to-br from-tsj-chip to-tsj-bg border border-gold/40 flex items-center justify-center shadow-md">
+          <i class="fa-solid fa-scale-balanced text-xl text-gold-light"></i>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-lg font-bold tracking-wide text-white">Poder Judicial del Estado de Chihuahua</h1>
+          </div>
+          <p class="text-xs text-gray-400">• Dashboard Estadístico de Gestión Jurisdiccional • </p>
+        </div>
+      </div>
+
+      <!-- Acciones en una sola fila: en teléfonos el botón de carga usa un texto
+           corto y Exportar / Restablecer sólo muestran el icono -->
+      <div class="flex flex-nowrap items-center gap-2.5">
+        <label class="cursor-pointer flex items-center gap-2 px-3.5 py-2 text-xs font-medium rounded-lg bg-tsj-field text-gold-light border border-gold/40 hover:bg-[#20232e] hover:border-gold active:scale-95 transition-all shadow-sm whitespace-nowrap" title="Cargar BASE_DASH2_ACTUALIZADA.xlsx">
+          <i class="fa-solid fa-file-excel text-gold"></i>
+          <span class="sm:hidden">Cargar Excel</span>
+          <span class="hidden sm:inline">Cargar BASE_DASH2_ACTUALIZADA.xlsx</span>
+          <input type="file" id="fileInput" accept=".xlsx, .xls" class="hidden">
+        </label>
+        <button id="btnExportExcel" onclick="exportToExcel()" class="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg bg-tsj-field text-gray-200 border border-tsj-btn hover:border-emerald-500/60 hover:text-emerald-300 transition-all shadow-sm whitespace-nowrap" title="Descargar a Excel las filas de datos con los filtros activos">
+          <i class="fa-solid fa-download text-emerald-400"></i>
+          <span class="hidden sm:inline">Exportar Excel</span>
+        </button>
+        <button onclick="resetFilters()" class="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg bg-tsj-field text-gray-300 border border-tsj-edge hover:bg-tsj-line hover:text-white transition-all shadow-sm whitespace-nowrap" title="Restablecer filtros">
+          <i class="fa-solid fa-arrow-rotate-left"></i>
+          <span class="hidden sm:inline">Restablecer</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Botón para mostrar / ocultar los filtros en pantallas pequeñas (< lg).
+         Plegado muestra un resumen de los filtros activos. En escritorio los
+         filtros siempre están visibles y este botón no aparece. -->
+    <button id="btnToggleFiltros" type="button" onclick="toggleFiltros()" aria-expanded="false" aria-controls="panelFiltros" class="lg:hidden w-full flex items-center justify-between gap-3 px-4 sm:px-6 py-3 border-t border-tsj-line text-left hover:bg-tsj-line/40 transition">
+      <span class="flex items-center gap-2 min-w-0">
+        <i class="fa-solid fa-sliders text-gold"></i>
+        <span class="text-[11px] uppercase font-medium tracking-wide text-gold-light shrink-0">Filtros</span>
+        <span id="resumenFiltros" class="text-xs text-gray-400 truncate">Todos los datos</span>
+      </span>
+      <i id="iconoFiltros" class="fa-solid fa-chevron-down text-gold-light text-xs transition-transform duration-200"></i>
+    </button>
+
+    <!-- Barra de filtros: los 5 son de selección múltiple con casillas (mismo
+         patrón; lógica en js/dashboard.js, sección 3). Plegable en móvil. -->
+    <div id="panelFiltros" class="hidden lg:block bg-tsj-bg/60 border-t border-tsj-line px-4 sm:px-6 lg:px-8 py-3">
+      <div class="max-w-7xl mx-auto grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+
+        <!-- 1. Materia -->
+        <div class="relative" data-multiselect>
+          <label class="block text-[11px] uppercase font-medium text-gold-light tracking-wide mb-1 flex items-center justify-between">
+            <span class="flex items-center gap-1.5"><i class="fa-solid fa-book-bookmark text-gold"></i> Materia</span>
+            <span id="msMateriaConteo" class="text-[10px] text-gray-400 lowercase font-medium">0 sel.</span>
+          </label>
+          <button id="msMateriaBtn" type="button" onclick="toggleFiltroMenu('materia', event)" aria-haspopup="true" aria-expanded="false" aria-controls="msMateriaMenu" class="w-full text-xs bg-tsj-field border border-tsj-edge text-gray-200 rounded-lg px-2.5 py-2 flex items-center justify-between outline-none focus:border-gold focus:ring-1 focus:ring-gold">
+            <span id="msMateriaTexto" class="truncate">Todas las Materias</span>
+            <i class="fa-solid fa-chevron-down text-[10px] text-gray-400 ml-1"></i>
+          </button>
+          <div id="msMateriaMenu" class="hidden absolute left-0 right-0 mt-1 bg-tsj-field border border-tsj-edge rounded-lg shadow-2xl z-50 p-2.5 pt-0 custom-scrollbar max-h-64 overflow-y-auto">
+            <div class="sticky top-0 z-10 bg-tsj-field flex items-center justify-between pt-2.5 pb-2 mb-2 border-b border-tsj-edge text-[11px]">
+              <button type="button" onclick="marcarTodos('materia', true)" class="text-gold-light hover:underline font-semibold">Seleccionar todos</button>
+              <button type="button" onclick="marcarTodos('materia', false)" class="text-gray-400 hover:text-white">Deseleccionar</button>
+            </div>
+            <div id="msMateriaLista" class="space-y-1.5">
+              <!-- Casillas generadas vía JS -->
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. Distrito Judicial (14 distritos oficiales) -->
+        <div class="relative" data-multiselect>
+          <label class="block text-[11px] uppercase font-medium text-gold-light tracking-wide mb-1 flex items-center justify-between">
+            <span class="flex items-center gap-1.5"><i class="fa-solid fa-landmark-flag text-gold"></i> Distrito Judicial</span>
+            <span id="msDistritoConteo" class="text-[10px] text-gray-400 lowercase font-medium">0 sel.</span>
+          </label>
+          <button id="msDistritoBtn" type="button" onclick="toggleFiltroMenu('distrito', event)" aria-haspopup="true" aria-expanded="false" aria-controls="msDistritoMenu" class="w-full text-xs bg-tsj-field border border-tsj-edge text-gray-200 rounded-lg px-2.5 py-2 flex items-center justify-between outline-none focus:border-gold focus:ring-1 focus:ring-gold">
+            <span id="msDistritoTexto" class="truncate">Todos los Distritos</span>
+            <i class="fa-solid fa-chevron-down text-[10px] text-gray-400 ml-1"></i>
+          </button>
+          <div id="msDistritoMenu" class="hidden absolute left-0 right-0 mt-1 bg-tsj-field border border-tsj-edge rounded-lg shadow-2xl z-50 p-2.5 pt-0 custom-scrollbar max-h-64 overflow-y-auto">
+            <div class="sticky top-0 z-10 bg-tsj-field flex items-center justify-between pt-2.5 pb-2 mb-2 border-b border-tsj-edge text-[11px]">
+              <button type="button" onclick="marcarTodos('distrito', true)" class="text-gold-light hover:underline font-semibold">Seleccionar todos</button>
+              <button type="button" onclick="marcarTodos('distrito', false)" class="text-gray-400 hover:text-white">Deseleccionar</button>
+            </div>
+            <div id="msDistritoLista" class="space-y-1.5">
+              <!-- Casillas generadas vía JS -->
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. Juzgado / Tribunal (en cascada: según materias y distritos) -->
+        <div class="relative" data-multiselect>
+          <label class="block text-[11px] uppercase font-medium text-gold-light tracking-wide mb-1 flex items-center justify-between">
+            <span class="flex items-center gap-1.5"><i class="fa-solid fa-gavel text-gold"></i> Juzgado / Tribunal</span>
+            <span id="msJuzgadoConteo" class="text-[10px] text-gray-400 lowercase font-medium">0 sel.</span>
+          </label>
+          <button id="msJuzgadoBtn" type="button" onclick="toggleFiltroMenu('juzgado', event)" aria-haspopup="true" aria-expanded="false" aria-controls="msJuzgadoMenu" class="w-full text-xs bg-tsj-field border border-tsj-edge text-gray-200 rounded-lg px-2.5 py-2 flex items-center justify-between outline-none focus:border-gold focus:ring-1 focus:ring-gold">
+            <span id="msJuzgadoTexto" class="truncate">Todos los Juzgados</span>
+            <i class="fa-solid fa-chevron-down text-[10px] text-gray-400 ml-1"></i>
+          </button>
+          <div id="msJuzgadoMenu" class="hidden absolute left-0 right-0 lg:right-auto lg:w-96 mt-1 bg-tsj-field border border-tsj-edge rounded-lg shadow-2xl z-50 p-2.5 pt-0 custom-scrollbar max-h-64 overflow-y-auto">
+            <!-- Buscador de juzgados (por nombre o distrito, sin importar acentos).
+                 Mientras hay texto, los botones actúan sólo sobre los resultados. -->
+            <div class="sticky top-0 z-10 bg-tsj-field pt-2.5 pb-2 mb-2 border-b border-tsj-edge">
+              <div class="relative mb-2">
+                <i class="fa-solid fa-search text-[10px] absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500"></i>
+                <input id="msJuzgadoBuscar" type="search" autocomplete="off" placeholder="Buscar juzgado o distrito..." aria-label="Buscar juzgado o distrito" oninput="buscarEnFiltro('juzgado', this.value)" class="w-full text-xs pl-7 pr-2 py-1.5 bg-tsj-card border border-tsj-edge text-gray-200 rounded-md outline-none focus:border-gold focus:ring-1 focus:ring-gold placeholder-gray-500">
+              </div>
+              <div class="flex items-center justify-between text-[11px]">
+                <button id="msJuzgadoTodos" type="button" onclick="marcarTodos('juzgado', true)" class="text-gold-light hover:underline font-semibold">Seleccionar todos</button>
+                <button id="msJuzgadoNinguno" type="button" onclick="marcarTodos('juzgado', false)" class="text-gray-400 hover:text-white">Deseleccionar</button>
+              </div>
+            </div>
+            <div id="msJuzgadoLista" class="space-y-1.5">
+              <!-- Casillas generadas vía JS -->
+            </div>
+          </div>
+        </div>
+
+        <!-- 4. Año (opciones tomadas de los datos) -->
+        <div class="relative" data-multiselect>
+          <label class="block text-[11px] uppercase font-medium text-gold-light tracking-wide mb-1 flex items-center justify-between">
+            <span class="flex items-center gap-1.5"><i class="fa-regular fa-calendar-days text-gold"></i> Año</span>
+            <span id="msAnioConteo" class="text-[10px] text-gray-400 lowercase font-medium">0 sel.</span>
+          </label>
+          <button id="msAnioBtn" type="button" onclick="toggleFiltroMenu('anio', event)" aria-haspopup="true" aria-expanded="false" aria-controls="msAnioMenu" class="w-full text-xs bg-tsj-field border border-tsj-edge text-gray-200 rounded-lg px-2.5 py-2 flex items-center justify-between outline-none focus:border-gold focus:ring-1 focus:ring-gold">
+            <span id="msAnioTexto" class="truncate">Todos los Años</span>
+            <i class="fa-solid fa-chevron-down text-[10px] text-gray-400 ml-1"></i>
+          </button>
+          <div id="msAnioMenu" class="hidden absolute left-0 right-0 mt-1 bg-tsj-field border border-tsj-edge rounded-lg shadow-2xl z-50 p-2.5 pt-0 custom-scrollbar max-h-64 overflow-y-auto">
+            <div class="sticky top-0 z-10 bg-tsj-field flex items-center justify-between pt-2.5 pb-2 mb-2 border-b border-tsj-edge text-[11px]">
+              <button type="button" onclick="marcarTodos('anio', true)" class="text-gold-light hover:underline font-semibold">Seleccionar todos</button>
+              <button type="button" onclick="marcarTodos('anio', false)" class="text-gray-400 hover:text-white">Deseleccionar</button>
+            </div>
+            <div id="msAnioLista" class="space-y-1.5">
+              <!-- Casillas generadas vía JS -->
+            </div>
+          </div>
+        </div>
+
+        <!-- 5. Meses -->
+        <div class="relative" data-multiselect>
+          <label class="block text-[11px] uppercase font-medium text-gold-light tracking-wide mb-1 flex items-center justify-between">
+            <span class="flex items-center gap-1.5"><i class="fa-solid fa-list-check text-gold"></i> Meses</span>
+            <span id="msMesConteo" class="text-[10px] text-gray-400 lowercase font-medium">0 sel.</span>
+          </label>
+          <button id="msMesBtn" type="button" onclick="toggleFiltroMenu('mes', event)" aria-haspopup="true" aria-expanded="false" aria-controls="msMesMenu" class="w-full text-xs bg-tsj-field border border-tsj-edge text-gray-200 rounded-lg px-2.5 py-2 flex items-center justify-between outline-none focus:border-gold focus:ring-1 focus:ring-gold">
+            <span id="msMesTexto" class="truncate">Todos los Meses</span>
+            <i class="fa-solid fa-chevron-down text-[10px] text-gray-400 ml-1"></i>
+          </button>
+          <div id="msMesMenu" class="hidden absolute left-0 right-0 mt-1 bg-tsj-field border border-tsj-edge rounded-lg shadow-2xl z-50 p-2.5 pt-0 custom-scrollbar max-h-64 overflow-y-auto">
+            <div class="sticky top-0 z-10 bg-tsj-field flex items-center justify-between pt-2.5 pb-2 mb-2 border-b border-tsj-edge text-[11px]">
+              <button type="button" onclick="marcarTodos('mes', true)" class="text-gold-light hover:underline font-semibold">Seleccionar todos</button>
+              <button type="button" onclick="marcarTodos('mes', false)" class="text-gray-400 hover:text-white">Deseleccionar</button>
+            </div>
+            <div id="msMesLista" class="space-y-1.5">
+              <!-- Casillas generadas vía JS -->
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- DEMO: interruptor global de distritos sin datos (sólo con
+           TSJ_CONFIG.demo; js/dashboard.js quita "hidden"). Marcado: se ven
+           todos los distritos oficiales. Desmarcado: los distritos sin datos
+           salen del filtro de Distrito y de la gráfica. -->
+      <div id="toggleSinDatosGlobalWrap" class="max-w-7xl mx-auto mt-2.5 flex justify-end">
+        <label class="flex items-center gap-1.5 text-[11px] text-gray-300 cursor-pointer select-none bg-tsj-field border border-tsj-edge px-2.5 py-1 rounded-md hover:border-gold/40" title="Desmarcado: los distritos sin datos (p. ej. Arteaga y Rayón) se quitan del filtro de Distrito y de las gráficas">
+          <input type="checkbox" id="toggleSinDatosGlobal" checked onchange="toggleDistritosSinDatos(this.checked)" class="rounded border-tsj-edge bg-tsj-card accent-gold focus:ring-0 focus:ring-offset-0">
+          <span>Mostrar distritos sin datos</span>
+        </label>
+      </div>
+    </div>
+  </header>
+
+  <!-- Contenedor Principal -->
+  <!-- lg:max-w-[84rem] = 80rem de contenido + 2rem de padding por lado: el
+       contenido queda alineado con la barra de filtros en pantallas grandes
+       (la barra pone su padding fuera de max-w-7xl). La fila del logo usa la
+       misma clase. Debajo de lg no cambia. -->
+  <main class="max-w-7xl lg:max-w-[84rem] mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6 flex-1 w-full">
+
+    <!-- Estado sin datos: mientras no haya datos (demo, o local sin base
+         embebida) sólo se ve esta tarjeta; las demás secciones de <main> se
+         ocultan (js/dashboard.js, actualizarEstadoSinDatos). -->
+    <section id="estadoSinDatos" class="hidden bg-tsj-card rounded-xl border border-gold/30 shadow-md px-6 py-12 sm:py-16 text-center">
+      <div class="w-16 h-16 mx-auto mb-5 rounded-xl bg-tsj-field border border-gold/40 flex items-center justify-center">
+        <i class="fa-solid fa-file-excel text-3xl text-gold-light"></i>
+      </div>
+      <h2 class="text-lg font-bold text-white mb-2">Carga la base de datos para comenzar</h2>
+      <p class="text-sm text-gray-400 max-w-lg mx-auto mb-6">
+        Selecciona el archivo de Excel (BASE_DASH2_ACTUALIZADA.xlsx). Se procesa en tu navegador: los datos no se envían ni se guardan en ningún servidor.
+      </p>
+      <button type="button" onclick="document.getElementById('fileInput').click()" class="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold rounded-lg bg-tsj-field text-gold-light border border-gold/60 hover:bg-[#20232e] hover:border-gold active:scale-95 transition-all shadow-sm">
+        <i class="fa-solid fa-file-excel text-gold"></i>
+        <span>Cargar Excel</span>
+      </button>
+    </section>
+
+    <!-- Tarjetas de Indicadores Principales con Promedios y Suma de Resultado -->
+    <section class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+
+      <!-- KPI 1: Asuntos Recibidos -->
+      <div class="bg-tsj-card rounded-xl p-4 border border-tsj-line hover:border-gold/40 transition-all shadow-md">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-semibold uppercase tracking-wide text-gray-400 text-pretty"> Asuntos Recibidos</span>
+          <div class="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-400 flex items-center justify-center text-sm">
+            <i class="fa-solid fa-inbox"></i>
+          </div>
+        </div>
+        <div id="kpiRecibidos" class="text-2xl font-bold text-white tracking-tight">0</div>
+        <div class="mt-2 flex items-center justify-between text-[11px] text-gray-400 border-t border-tsj-soft pt-1.5">
+          <span>&sum; Total</span>
+          <span id="kpiRecibidosProm" class="text-blue-300 font-mono">--/m</span>
+        </div>
+      </div>
+
+      <!-- KPI 2: Asuntos Terminados -->
+      <div class="bg-tsj-card rounded-xl p-4 border border-tsj-line hover:border-gold/40 transition-all shadow-md">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-semibold uppercase tracking-wide text-gray-400 text-pretty"> Asuntos Terminados</span>
+          <div class="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center text-sm">
+            <i class="fa-solid fa-circle-check"></i>
+          </div>
+        </div>
+        <div id="kpiTerminados" class="text-2xl font-bold text-white tracking-tight">0</div>
+        <div class="mt-2 flex items-center justify-between text-[11px] text-gray-400 border-t border-tsj-soft pt-1.5">
+          <span>&sum; Concluidos</span>
+          <span id="kpiTerminadosProm" class="text-emerald-300 font-mono">--/m</span>
+        </div>
+      </div>
+
+      <!-- KPI 3: Sentencias -->
+      <div class="bg-tsj-card rounded-xl p-4 border border-tsj-line hover:border-gold/40 transition-all shadow-md">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-semibold uppercase tracking-wide text-gray-400 text-pretty">Sentencias</span>
+          <div class="w-8 h-8 rounded-lg bg-purple-500/10 text-purple-400 flex items-center justify-center text-sm">
+            <i class="fa-solid fa-gavel"></i>
+          </div>
+        </div>
+        <div id="kpiSentencias" class="text-2xl font-bold text-white tracking-tight">0</div>
+        <div class="mt-2 flex items-center justify-between text-[11px] text-gray-400 border-t border-tsj-soft pt-1.5">
+          <span>&sum; Fallos</span>
+          <span id="kpiSentenciasProm" class="text-purple-300 font-mono">--/m</span>
+        </div>
+      </div>
+
+      <!-- KPI 4: Audiencias Celebradas -->
+      <div class="bg-tsj-card rounded-xl p-4 border border-tsj-line hover:border-gold/40 transition-all shadow-md">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-semibold uppercase tracking-wide text-gray-400 text-pretty">Audiencias Celebradas</span>
+          <div class="w-8 h-8 rounded-lg bg-amber-500/10 text-amber-400 flex items-center justify-center text-sm">
+            <i class="fa-solid fa-users-rectangle"></i>
+          </div>
+        </div>
+        <div id="kpiAudiencias" class="text-2xl font-bold text-white tracking-tight">0</div>
+        <div class="mt-2 flex items-center justify-between text-[11px] text-gray-400 border-t border-tsj-soft pt-1.5">
+          <span>&sum; Celebradas</span>
+          <span id="kpiAudienciasProm" class="text-amber-300 font-mono">--/m</span>
+        </div>
+      </div>
+
+      <!-- KPI 5: Apelaciones Admitidas -->
+      <div class="bg-tsj-card rounded-xl p-4 border border-tsj-line hover:border-gold/40 transition-all shadow-md">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-semibold uppercase tracking-wide text-gray-400 text-pretty">Apelaciones</span>
+          <div class="w-8 h-8 rounded-lg bg-rose-500/10 text-rose-400 flex items-center justify-center text-sm">
+            <i class="fa-solid fa-scale-unbalanced-flip"></i>
+          </div>
+        </div>
+        <div id="kpiApelaciones" class="text-2xl font-bold text-white tracking-tight">0</div>
+        <div class="mt-2 flex items-center justify-between text-[11px] text-gray-400 border-t border-tsj-soft pt-1.5">
+          <span>&sum; Admitidas</span>
+          <span id="kpiApelacionesProm" class="text-rose-300 font-mono">--/m</span>
+        </div>
+      </div>
+
+      <!-- KPI 6: Tasa de Resolución (Terminados / Recibidos) -->
+      <div class="bg-tsj-card rounded-xl p-4 border border-tsj-line hover:border-gold/40 transition-all shadow-md">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-semibold uppercase tracking-wide text-gray-400 text-pretty">Tasa Resolución</span>
+          <div class="w-8 h-8 rounded-lg bg-gold/10 text-gold-light flex items-center justify-center text-sm">
+            <i class="fa-solid fa-chart-line"></i>
+          </div>
+        </div>
+        <div id="kpiTasa" class="text-2xl font-bold text-white tracking-tight">0.0%</div>
+        <div class="mt-2 flex items-center justify-between text-[11px] text-gray-400 border-t border-tsj-soft pt-1.5">
+          <span>Term. ÷ Rec.</span>
+          <span id="kpiMesesPeriodo" class="text-gold-light font-mono">0 meses</span>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- Fila 1 de Gráficas: Serie Temporal y Carga por Materia -->
+    <section class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+      <!-- Evolución Anual (años del filtro de Año). La gráfica llena la tarjeta:
+           si la dona de al lado crece (vista por Tipo), las barras crecen con
+           ella en vez de dejar espacio vacío. -->
+      <div class="bg-tsj-card rounded-xl p-5 border border-tsj-line shadow-md lg:col-span-2 flex flex-col">
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+          <div>
+            <h2 class="text-sm font-bold text-white tracking-wide flex items-center gap-2">
+              <i class="fa-solid fa-chart-column text-gold"></i> Evolución Anual con Cifras Clave
+            </h2>
+            <p class="text-xs text-gray-400">Recibidos, Terminados y Sentencias de cada año seleccionado</p>
+          </div>
+          <span class="text-[11px] font-mono bg-tsj-field border border-gold/20 text-gold-light px-2.5 py-1 rounded-md" id="promedioAnualBadge">Prom. Anual: --</span>
+        </div>
+        <!-- flex-1: toma el alto libre de la tarjeta (mínimo el de antes).
+             El canvas va en absolute para no empujar el alto: así la gráfica
+             también se encoge cuando la dona vuelve a su tamaño normal. -->
+        <div class="relative flex-1 min-h-[16rem] sm:min-h-[18rem] w-full">
+          <canvas id="chartEvolucion" class="absolute inset-0"></canvas>
+        </div>
+      </div>
+
+      <!-- Dona: Carga por Materia; con una sola materia elegida, Distribución
+           por Tipo (títulos y contenido los pone js/dashboard.js) -->
+      <div class="bg-tsj-card rounded-xl p-5 border border-tsj-line shadow-md flex flex-col justify-between">
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <h2 class="text-sm font-bold text-white tracking-wide flex items-center gap-2">
+              <i class="fa-solid fa-chart-pie text-gold"></i> <span id="tituloDona">Carga por Materia</span>
+            </h2>
+          </div>
+          <p id="subtituloDona" class="text-xs text-gray-400 mb-3">Distribución y participación porcentual</p>
+        </div>
+        <!-- Alto: h-52 por materia, h-72 por Tipo (lo cambia js/dashboard.js) -->
+        <div id="donaContenedor" class="relative h-52 w-full flex items-center justify-center">
+          <canvas id="chartMaterias"></canvas>
+        </div>
+        <div id="materiaSummary" class="grid grid-cols-3 gap-2 pt-3 border-t border-tsj-line text-center text-xs mt-3">
+          <!-- Desglose inyectado vía JS -->
+        </div>
+      </div>
+
+    </section>
+
+    <!-- Fila 2: Comportamiento Mensual y Tasas de Conclusión -->
+    <section class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+      <!-- Comportamiento Mensual (promedio por mes) -->
+      <div class="bg-tsj-card rounded-xl p-5 border border-tsj-line shadow-md lg:col-span-2">
+        <div class="mb-4">
+          <h2 class="text-sm font-bold text-white tracking-wide flex items-center gap-2">
+            <i class="fa-solid fa-calendar-days text-gold"></i> Comportamiento Mensual
+          </h2>
+          <p id="mensualSubtitulo" class="text-xs text-gray-400">Promedio por mes de los años seleccionados</p>
+        </div>
+        <div class="relative h-64 sm:h-72 w-full">
+          <canvas id="chartMensual"></canvas>
+        </div>
+      </div>
+
+      <!-- Tasas de Conclusión y resumen del periodo -->
+      <div class="bg-tsj-card rounded-xl p-5 border border-tsj-line shadow-md flex flex-col justify-between">
+        <div>
+          <h2 class="text-sm font-bold text-white tracking-wide flex items-center gap-2 mb-3">
+            <i class="fa-solid fa-gauge-high text-gold"></i> Tasas de Conclusión
+          </h2>
+          <div class="space-y-4">
+            <div>
+              <div class="flex justify-between text-xs mb-1">
+                <span class="text-gray-400">Resolución (Terminados ÷ Recibidos)</span>
+                <span id="tasaResolucion" class="font-bold text-gold-light">0.0%</span>
+              </div>
+              <div class="w-full bg-tsj-field h-2 rounded-full overflow-hidden border border-tsj-line">
+                <div id="barResolucion" class="bg-gradient-to-r from-emerald-500 to-gold h-full rounded-full transition-all duration-500" style="width: 0%"></div>
+              </div>
+            </div>
+            <div>
+              <div class="flex justify-between text-xs mb-1">
+                <span class="text-gray-400">Sentencias (Sentencias ÷ Terminados)</span>
+                <span id="tasaSentencias" class="font-bold text-purple-400">0.0%</span>
+              </div>
+              <div class="w-full bg-tsj-field h-2 rounded-full overflow-hidden border border-tsj-line">
+                <div id="barSentencias" class="bg-purple-500 h-full rounded-full transition-all duration-500" style="width: 0%"></div>
+              </div>
+            </div>
+            <div>
+              <div class="flex justify-between text-xs mb-1">
+                <span class="text-gray-400">Impugnación (Apelaciones ÷ Sentencias)</span>
+                <span id="tasaApelacion" class="font-bold text-rose-400">0.0%</span>
+              </div>
+              <div class="w-full bg-tsj-field h-2 rounded-full overflow-hidden border border-tsj-line">
+                <div id="barApelacion" class="bg-rose-500 h-full rounded-full transition-all duration-500" style="width: 0%"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-4 p-3 rounded-lg bg-tsj-field border border-tsj-line text-[11px] text-gray-400 space-y-1">
+          <div class="flex justify-between gap-3">
+            <span>Meses con datos en el periodo:</span>
+            <span id="statMesesActivos" class="font-mono text-white">0</span>
+          </div>
+          <div class="flex justify-between gap-3">
+            <span>Filas de datos (agregadas):</span>
+            <span id="statTotalRegistros" class="font-mono text-white">0</span>
+          </div>
+          <div class="flex justify-between gap-3">
+            <span>Fuente:</span>
+            <span id="statFuente" class="text-gold-light font-semibold text-right truncate" title="">Sin datos</span>
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- Fila 3: Volumen por Distrito Judicial / Juzgado -->
+    <section class="bg-tsj-card rounded-xl p-5 border border-tsj-line shadow-md">
+      <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+        <div>
+          <h2 class="text-sm font-bold text-white tracking-wide flex items-center gap-2">
+            <i class="fa-solid fa-building-columns text-gold"></i> Volumen por Distrito Judicial / Órgano Jurisdiccional
+          </h2>
+          <p class="text-xs text-gray-400">Distribución territorial con etiquetas numéricas y porcentaje del total</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="text-[11px] font-mono bg-tsj-field border border-gold/20 text-gold-light px-2.5 py-1 rounded-md" id="promedioDistritoBadge">Promedio: --</span>
+          <span class="text-[11px] text-gray-400 font-medium" id="chartDistritosLabel">14 Distritos Judiciales</span>
+        </div>
+      </div>
+      <div class="relative overflow-y-auto max-h-[380px] custom-scrollbar pr-1">
+        <div id="distritoCanvasContainer" class="relative w-full h-[400px]">
+          <canvas id="chartDistritos"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- Fila 4: Resumen Consolidado (Agrupado por Materia / Distrito / Órgano) -->
+    <section class="bg-tsj-card rounded-xl border border-tsj-line overflow-hidden shadow-md">
+      <div class="p-4 sm:p-5 border-b border-tsj-line flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 class="text-sm font-bold text-white tracking-wide flex items-center gap-2">
+            <i class="fa-solid fa-table-cells-large text-gold"></i> Resumen Consolidado Jurisdiccional
+          </h2>
+          <p class="text-xs text-gray-400">Suma de la columna Resultado por materia y órgano jurisdiccional; Total General = 5 categorías + otras categorías</p>
+        </div>
+        <div class="flex items-center gap-2.5">
+          <div class="relative">
+            <i class="fa-solid fa-search text-xs absolute left-3 top-1/2 -translate-y-1/2 text-gray-500"></i>
+            <input type="text" id="tableSearch" placeholder="Buscar materia, distrito u órgano..." oninput="onSearchTable()" class="text-xs pl-8 pr-3 py-1.5 bg-tsj-field border border-tsj-edge text-gray-200 rounded-lg w-52 sm:w-64 outline-none focus:border-gold focus:ring-1 focus:ring-gold placeholder-gray-500">
+          </div>
+          <button onclick="exportToCSV()" class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-tsj-field text-gray-200 border border-tsj-btn hover:border-emerald-500/60 hover:text-emerald-300 transition-all shadow-sm" title="Descargar como CSV">
+            <i class="fa-solid fa-file-csv text-emerald-400"></i>
+            <span>Exportar CSV</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="overflow-x-auto custom-scrollbar">
+        <table class="w-full min-w-[72rem] table-fixed text-left text-xs whitespace-nowrap">
+          <!-- Anchos fijos: al ordenar o filtrar cambian las filas, pero las
+               columnas y los encabezados no se mueven. Juzgado / Órgano toma
+               el espacio restante; en pantallas angostas la tabla se desplaza. -->
+          <colgroup>
+            <col class="w-28">            <!-- Materia -->
+            <col class="w-40">            <!-- Distrito -->
+            <col>                         <!-- Juzgado / Órgano -->
+            <col class="w-24">            <!-- Recibidos -->
+            <col class="w-[6.5rem]">      <!-- Terminados -->
+            <col class="w-[6.5rem]">      <!-- Sentencias -->
+            <col class="w-[6.5rem]">      <!-- Aud. Celebradas -->
+            <col class="w-[6.75rem]">     <!-- Apelaciones -->
+            <col class="w-24">            <!-- Otras Cat. -->
+            <col class="w-24">            <!-- Total General -->
+          </colgroup>
+          <thead class="bg-tsj-head text-gray-400 uppercase font-bold text-[10px] tracking-wider border-b border-tsj-line text-center">
+            <!-- Encabezados centrados verticalmente. Con los anchos fijos de
+                 <colgroup> no se mueven al ordenar ni al filtrar. -->
+            <tr class="align-middle">
+              <th class="px-4 py-3">Materia</th>
+              <th class="px-4 py-3" data-sort="distrito" aria-sort="none"><button type="button" onclick="onSortTable('distrito')" class="uppercase font-bold tracking-wider [text-align:inherit] hover:text-gold-light focus:outline-none focus-visible:ring-1 focus-visible:ring-gold rounded transition-colors">Distrito&nbsp;<i data-sort-icono class="fa-solid fa-sort fa-fw text-[9px] opacity-40"></i></button></th>
+              <th class="px-4 py-3">Juzgado / Órgano</th>
+              <th class="px-4 py-3 text-right whitespace-normal" data-sort="recibidos" aria-sort="none"><button type="button" onclick="onSortTable('recibidos')" class="uppercase font-bold tracking-wider [text-align:inherit] hover:text-gold-light focus:outline-none focus-visible:ring-1 focus-visible:ring-gold rounded transition-colors"><span class="block">Recibidos</span><span class="whitespace-nowrap">(&sum;)&nbsp;<i data-sort-icono class="fa-solid fa-sort fa-fw text-[9px] opacity-40"></i></span></button></th>
+              <th class="px-4 py-3 text-right whitespace-normal" data-sort="terminados" aria-sort="none"><button type="button" onclick="onSortTable('terminados')" class="uppercase font-bold tracking-wider [text-align:inherit] hover:text-gold-light focus:outline-none focus-visible:ring-1 focus-visible:ring-gold rounded transition-colors"><span class="block">Terminados</span><span class="whitespace-nowrap">(&sum;)&nbsp;<i data-sort-icono class="fa-solid fa-sort fa-fw text-[9px] opacity-40"></i></span></button></th>
+              <th class="px-4 py-3 text-right whitespace-normal" data-sort="sentencias" aria-sort="none"><button type="button" onclick="onSortTable('sentencias')" class="uppercase font-bold tracking-wider [text-align:inherit] hover:text-gold-light focus:outline-none focus-visible:ring-1 focus-visible:ring-gold rounded transition-colors"><span class="block">Sentencias</span><span class="whitespace-nowrap">(&sum;)&nbsp;<i data-sort-icono class="fa-solid fa-sort fa-fw text-[9px] opacity-40"></i></span></button></th>
+              <th class="px-4 py-3 text-right whitespace-normal" data-sort="audiencias" aria-sort="none"><button type="button" onclick="onSortTable('audiencias')" class="uppercase font-bold tracking-wider [text-align:inherit] hover:text-gold-light focus:outline-none focus-visible:ring-1 focus-visible:ring-gold rounded transition-colors"><span class="block">Aud. Celebradas</span><span class="whitespace-nowrap">(&sum;)&nbsp;<i data-sort-icono class="fa-solid fa-sort fa-fw text-[9px] opacity-40"></i></span></button></th>
+              <th class="px-4 py-3 text-right whitespace-normal" data-sort="apelaciones" aria-sort="none"><button type="button" onclick="onSortTable('apelaciones')" class="uppercase font-bold tracking-wider [text-align:inherit] hover:text-gold-light focus:outline-none focus-visible:ring-1 focus-visible:ring-gold rounded transition-colors"><span class="block">Apelaciones</span><span class="whitespace-nowrap">(&sum;)&nbsp;<i data-sort-icono class="fa-solid fa-sort fa-fw text-[9px] opacity-40"></i></span></button></th>
+              <th class="px-4 py-3 text-right whitespace-normal cursor-help" title="Amparos, Interlocutorias, Sucesiones y Otros (apelaciones no admitidas y audiencias pronunciadas)" data-sort="otras" aria-sort="none"><button type="button" onclick="onSortTable('otras')" class="uppercase font-bold tracking-wider [text-align:inherit] hover:text-gold-light focus:outline-none focus-visible:ring-1 focus-visible:ring-gold rounded transition-colors"><span class="block">Otras Cat.</span><span class="whitespace-nowrap">(&sum;)&nbsp;<i data-sort-icono class="fa-solid fa-sort fa-fw text-[9px] opacity-40"></i></span></button></th>
+              <th class="px-4 py-3 text-right whitespace-normal text-gold-light" data-sort="total" aria-sort="none"><button type="button" onclick="onSortTable('total')" class="uppercase font-bold tracking-wider [text-align:inherit] hover:text-gold-light focus:outline-none focus-visible:ring-1 focus-visible:ring-gold rounded transition-colors"><span class="block">Total</span><span class="whitespace-nowrap">General&nbsp;<i data-sort-icono class="fa-solid fa-sort fa-fw text-[9px] opacity-40"></i></span></button></th>
+            </tr>
+          </thead>
+          <tbody id="tableBody" class="divide-y divide-tsj-soft text-gray-300 font-normal">
+            <!-- Filas inyectadas dinámicamente -->
+          </tbody>
+          <tfoot id="tableFoot" class="bg-tsj-head font-bold border-t border-tsj-line text-white text-xs">
+            <!-- Totales consolidados -->
+          </tfoot>
+        </table>
+      </div>
+
+      <!-- Controles de Paginación -->
+      <div class="p-3 border-t border-tsj-line bg-tsj-head flex items-center justify-between text-xs text-gray-400">
+        <span id="tableInfo">Mostrando 0 de 0 registros</span>
+        <div class="flex items-center gap-1.5">
+          <button id="btnPrevPage" onclick="changePage(-1)" class="px-3 py-1 rounded bg-tsj-field text-gray-200 border border-tsj-edge hover:bg-tsj-line hover:border-gold/40 disabled:opacity-30 disabled:pointer-events-none transition">Anterior</button>
+          <span id="pageNumber" class="px-2 font-mono font-bold text-gold-light">1 / 1</span>
+          <button id="btnNextPage" onclick="changePage(1)" class="px-3 py-1 rounded bg-tsj-field text-gray-200 border border-tsj-edge hover:bg-tsj-line hover:border-gold/40 disabled:opacity-30 disabled:pointer-events-none transition">Siguiente</button>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="bg-tsj-bg border-t border-tsj-soft py-4 text-center text-xs text-gray-500">
+    Poder Judicial del Estado de Chihuahua • Gestión de Estadística • Filtro Estricto de Agrupación Normativa
+  </footer>
+
+  <!-- Aviso flotante (toast) -->
+  <div id="toastNotification" role="status" aria-live="polite" class="fixed bottom-5 right-5 z-50 max-w-sm bg-tsj-field border border-gold text-white px-4 py-3 rounded-lg shadow-2xl flex items-start gap-3 transition-all duration-300 translate-y-24 opacity-0 pointer-events-none">
+    <i id="toastIcon" class="fa-solid fa-circle-check text-gold-light text-lg mt-0.5"></i>
+    <span id="toastMessage" class="text-xs whitespace-pre-line"></span>
+  </div>
+
+  <!-- Configuración (modo demo, ver js/config.js). La base embebida local
+       (data/embedded-data.js + pako) ya no se carga aquí: js/dashboard.js la
+       carga sólo si no es la demo y si el archivo existe. -->
+  <script src="js/config.js"></script>
+  <!-- Capa de datos: catálogos, normalización, carga y agregaciones (sin DOM) -->
+  <script src="js/data-layer.js"></script>
+  <!-- Funcionalidad: estado de la vista, filtros, KPIs, gráficas, tabla y carga de Excel -->
+  <script src="js/dashboard.js"></script>
+</body>
+</html>
