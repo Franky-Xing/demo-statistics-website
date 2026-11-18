@@ -3,6 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- DEMO: al publicar la demo, el flujo .github/workflows/publicar-demo.yml
+       cambia la marca de abajo por una etiqueta meta "version" con el tag del
+       release, y la marca del pie de página por el texto de la versión. Fuera
+       de la demo se quedan como comentarios y no se ven. -->
+  <meta name="version" content="v0.1.1">
   <title>Dashboard Estadístico Judicial - Poder Judicial de Chihuahua</title>
   <link rel="icon" type="image/x-icon" href="./media/tsj-escudo.ico">
   <!-- Tailwind CSS -->
@@ -235,10 +240,9 @@
 
       </div>
 
-      <!-- DEMO: interruptor global de distritos sin datos (sólo con
-           TSJ_CONFIG.demo; js/dashboard.js quita "hidden"). Marcado: se ven
-           todos los distritos oficiales. Desmarcado: los distritos sin datos
-           salen del filtro de Distrito y de la gráfica. -->
+      <!-- Interruptor global de distritos sin datos. Marcado: se ven todos los
+           distritos oficiales. Desmarcado: los distritos sin datos salen del
+           filtro de Distrito y de la gráfica. -->
       <div id="toggleSinDatosGlobalWrap" class="max-w-7xl mx-auto mt-2.5 flex justify-end">
         <label class="flex items-center gap-1.5 text-[11px] text-gray-300 cursor-pointer select-none bg-tsj-field border border-tsj-edge px-2.5 py-1 rounded-md hover:border-gold/40" title="Desmarcado: los distritos sin datos (p. ej. Arteaga y Rayón) se quitan del filtro de Distrito y de las gráficas">
           <input type="checkbox" id="toggleSinDatosGlobal" checked onchange="toggleDistritosSinDatos(this.checked)" class="rounded border-tsj-edge bg-tsj-card accent-gold focus:ring-0 focus:ring-offset-0">
@@ -270,6 +274,13 @@
         <i class="fa-solid fa-file-excel text-gold"></i>
         <span>Cargar Excel</span>
       </button>
+      <!-- DEMO: enlace al archivo de ejemplo con datos ficticios. Sólo se ve en
+           la demo (js/dashboard.js quita "hidden"); el flujo de publicación
+           copia el archivo a samples/ del sitio. -->
+      <p id="enlaceMuestra" class="hidden mt-5 text-xs text-gray-400">
+        ¿No tienes un archivo?
+        <a href="samples/BASE_DEMO_FICTICIA.xlsx" download class="text-gold-light font-semibold hover:underline">Descarga un ejemplo con datos ficticios</a>
+      </p>
     </section>
 
     <!-- Tarjetas de Indicadores Principales con Promedios y Suma de Resultado -->
@@ -581,8 +592,8 @@
 
   </main>
 
-  <footer class="bg-tsj-bg border-t border-tsj-soft py-4 text-center text-xs text-gray-500">
-    Poder Judicial del Estado de Chihuahua • Gestión de Estadística • Filtro Estricto de Agrupación Normativa
+  <footer class="bg-tsj-bg border-t border-tsj-soft px-4 py-4 text-center text-xs text-gray-500">
+    Poder Judicial del Estado de Chihuahua • Gestión de Estadística • Filtro Estricto de Agrupación Normativa • <span class="whitespace-nowrap">Versión v0.1.1</span>
   </footer>
 
   <!-- Aviso flotante (toast) -->

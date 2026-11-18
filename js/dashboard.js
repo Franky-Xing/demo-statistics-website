@@ -278,10 +278,9 @@ function alCambiarFiltro(clave) {
 // 4. OPCIONES DE LOS FILTROS (catálogos + valores presentes en la base)
 // ============================================================================
 // "Mostrar distritos sin datos" (p. ej. ARTEAGA y RAYÓN, sin registros en la
-// base). Uso normal: casilla en la gráfica de distritos, sólo oculta en esa
-// gráfica los distritos que quedan en 0. DEMO: interruptor global en la barra
-// de filtros; apagado, además quita del filtro de Distrito los distritos sin
-// registros en la base.
+// base): interruptor global en la barra de filtros. Apagado, quita de la
+// gráfica los distritos que quedan en 0 y del filtro de Distrito los distritos
+// sin registros en la base.
 let mostrarDistritosSinDatos = true;
 
 function opcionesDistrito() {
@@ -292,13 +291,7 @@ function opcionesDistrito() {
     .map(d => ({ valor: d, texto: d }));
 }
 
-// Casilla de la gráfica (uso normal): sólo vuelve a dibujar la gráfica
-function toggleSinDatosGrafica(mostrar) {
-  mostrarDistritosSinDatos = mostrar;
-  renderDistritosChart();
-}
-
-// DEMO: interruptor global de la barra de filtros
+// Interruptor global de la barra de filtros
 function toggleDistritosSinDatos(mostrar) {
   mostrarDistritosSinDatos = mostrar;
   definirOpciones('distrito', opcionesDistrito());
@@ -338,10 +331,8 @@ function actualizarOpcionesJuzgado() {
 function resetFilters() {
   // Restablecer también vuelve a mostrar los distritos sin datos
   mostrarDistritosSinDatos = true;
-  ['toggleSinDatos', 'toggleSinDatosGlobal'].forEach(id => {
-    const casilla = document.getElementById(id);
-    if (casilla) casilla.checked = true;
-  });
+  const casillaSinDatos = document.getElementById('toggleSinDatosGlobal');
+  if (casillaSinDatos) casillaSinDatos.checked = true;
   definirOpciones('distrito', opcionesDistrito());
   seleccionarTodo('materia');
   seleccionarTodo('distrito');
@@ -1191,6 +1182,9 @@ window.addEventListener('DOMContentLoaded', async () => {
     rawDataset = [];
     errorCarga = err.message;
   }
+  // DEMO: enlace al Excel de ejemplo en la tarjeta "Carga la base de datos"
+  // (el archivo sólo existe en el sitio publicado de la demo)
+  if (DEMO) document.getElementById('enlaceMuestra')?.classList.remove('hidden');
   actualizarEstadoSinDatos();
 
   // Opciones de los filtros y cierre de sus menús (clic fuera o Escape)
