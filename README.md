@@ -33,8 +33,14 @@ El archivo de ejemplo muestra el formato exacto.
 Los archivos del sitio en la rama `gh-pages` se **generan automáticamente** desde el repositorio privado de desarrollo cada vez que se publica una nueva versión (release) allí, y GitHub Pages sirve esa rama.
 
 - No edites `gh-pages` a mano: la siguiente versión reemplaza sus archivos.
-- La rama `main` sólo contiene este README.
+- La rama `main` sólo contiene este README y la licencia.
 
 ## Estado y tecnología
 
 Es un **prototipo**: HTML y JavaScript con Tailwind CSS, Chart.js y SheetJS, cargados desde CDN. La versión final se construirá con Next.js y un backend propio.
+
+## Licencia
+
+Copyright (c) 2026 Poder Judicial del Estado de Chihuahua. Todos los derechos reservados.
+
+Puedes ver el código y usar la demo en línea; cualquier otro uso requiere autorización por escrito del Poder Judicial del Estado de Chihuahua. El nombre y el escudo del Poder Judicial no se licencian con el código. Consulta [LICENSE](LICENSE).
